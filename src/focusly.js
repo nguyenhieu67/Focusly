@@ -1,22 +1,40 @@
 Focusly.elements = [];
 
 function Focusly(options = {}) {
+    if (!options.content && !options.templateId) {
+        console.error("You must provide one of 'content' or 'templateId'.");
+        return;
+    }
+
+    if (options.content && options.template) {
+        options.templateId = null;
+        console.warn(
+            "Both 'content' adn 'templateId' are specified, and 'templateId' will be ignored"
+        );
+    }
+
+    if (options.templateId) {
+        options = document.querySelector(`#${options.templateId}`);
+
+        if (!this.template) {
+            console.error(`#${options.templateId} does not exist!`);
+            return;
+        }
+    }
+
     this.opt = Object.assign(
         {
             destroyOnClose: true,
             footer: false,
+            enableScrollLock: true,
             cssClass: [],
             closeMethods: ["button", "overlay", "escape"],
+            scrollLockTarget: () => document.body,
         },
         options
     );
-    this.template = document.querySelector(`#${this.opt.templateId}`);
 
-    if (!this.template) {
-        console.error(`#${this.opt.templateId} does not exist!`);
-        return;
-    }
-
+    this.content = this.opt.content;
     const { closeMethods } = this.opt;
     this._allowButtonClose = closeMethods.includes("button");
     this._allowBackdropClose = closeMethods.includes("overlay");
@@ -28,11 +46,17 @@ function Focusly(options = {}) {
 }
 
 Focusly.prototype._build = function () {
-    const content = this.template.content.cloneNode(true);
+    const contentNode = this.content
+        ? document.createElement("div")
+        : this.template.content.cloneNode(true);
+
+    if (this.content) {
+        contentNode.innerHTML = this.content;
+    }
 
     // Create modal elements
     this._backdrop = document.createElement("div");
-    this._backdrop.className = "focusly__backdrop";
+    this._backdrop.className = "focusly";
 
     const container = document.createElement("div");
     container.className = "focusly__container";
@@ -50,12 +74,12 @@ Focusly.prototype._build = function () {
         container.append(closeBtn);
     }
 
-    const modalContent = document.createElement("div");
-    modalContent.className = "focusly__content";
+    this._modalContent = document.createElement("div");
+    this._modalContent.className = "focusly__content";
 
     // Append content and elements
-    modalContent.append(content);
-    container.append(modalContent);
+    this._modalContent.append(contentNode);
+    container.append(this._modalContent);
 
     if (this.opt.footer) {
         this._modalFooter = document.createElement("div");
@@ -69,6 +93,13 @@ Focusly.prototype._build = function () {
 
     this._backdrop.append(container);
     document.body.append(this._backdrop);
+};
+
+Focusly.prototype.setContent = function (content) {
+    this.content = content;
+    if (this._modalContent) {
+        this._modalContent.innerHTML = this.content;
+    }
 };
 
 Focusly.prototype.setFooterContent = function (html) {
@@ -117,8 +148,19 @@ Focusly.prototype.open = function () {
     }, 0);
 
     // Disable scrolling
-    document.body.classList.add("focusly--no-scroll");
-    document.body.style.paddingRight = this._getScrollbarWidth() + "px";
+    if (this.opt.enableScrollLock) {
+        const target = this.opt.scrollLockTarget();
+
+        if (this._hasScrollbar(target)) {
+            target.classList.add("focusly--no-scroll");
+            const targetPadRight = parseInt(
+                getComputedStyle(target).paddingRight
+            );
+
+            target.style.paddingRight =
+                targetPadRight + this._getScrollbarWidth() + "px";
+        }
+    }
 
     // Attach event listeners
     if (this._allowBackdropClose) {
@@ -145,6 +187,17 @@ Focusly.prototype._handleEscapeKey = function (e) {
     }
 };
 
+Focusly.prototype._hasScrollbar = (target) => {
+    if ([document.documentElement, document.body].includes(target)) {
+        return (
+            document.documentElement.scrollHeight >
+                document.documentElement.clientHeight ||
+            document.body.scrollHeight > document.body.clientHeight
+        );
+    }
+    return target.scrollHeight > target.clientHeight;
+};
+
 Focusly.prototype._onTransitionEnd = function (callback) {
     this._backdrop.ontransitionend = (e) => {
         if (e.propertyName !== "transform") return;
@@ -169,9 +222,13 @@ Focusly.prototype.close = function (destroy = this.opt.destroyOnClose) {
         }
 
         // Enable scrolling
-        if (!Focusly.elements.length) {
-            document.body.classList.remove("focusly--no-scroll");
-            document.body.style.paddingRight = "";
+        if (!Focusly.elements.length && this.opt.enableScrollLock) {
+            const target = this.opt.scrollLockTarget();
+
+            if (this._hasScrollbar(target)) {
+                target.classList.remove("focusly--no-scroll");
+                target.style.paddingRight = "";
+            }
         }
 
         if (typeof this.opt.onClose === "function") this.opt.onClose();
