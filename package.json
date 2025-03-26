@@ -1,0 +1,9 @@
+{
+    "scripts": {
+        "minify": "terser focusly.js -o focusly.min.js && csso focusly.css -o focusly.min.css"
+    },
+    "dependencies": {
+        "csso-cli": "^4.0.2",
+        "terser": "^5.39.0"
+    }
+}
